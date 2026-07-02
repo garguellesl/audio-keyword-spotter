@@ -31,7 +31,8 @@ data/          # raw/processed audio (gitignored)
 
 ## Progress log
 - [x] Repo scaffold + dependency injection design for dataset loading
-- [ ] Dataset download + label parsing
+- [x] Fixed-length padding/truncation for variable-length clips
+- [ ] Dataset download + label parsing (manifest generator script)
 - [ ] Mel-spectrogram feature extraction
 - [ ] CNN model
 - [ ] Training loop

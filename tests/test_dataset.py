@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 import torch
 
 from src.dataset import KeywordSpottingDataset, Sample, load_manifest
@@ -38,20 +37,29 @@ def test_dataset_returns_correct_label_index():
     assert label_index == 0
 
 
-@pytest.mark.xfail(
-    reason="Variable-length clips aren't padded/truncated yet — TODO next session",
-    strict=True,
-)
 def test_dataset_pads_short_clips_to_fixed_length():
     """Speech Commands clips are ~1s @ 16kHz but not always exactly 16000
-    samples. This test documents the behavior I still need to implement:
-    every item returned by the dataset should have the same waveform length
-    so batching works without a custom collate_fn."""
+    samples. Every item returned by the dataset should have the same
+    waveform length so batching works without a custom collate_fn."""
     short_clip = torch.zeros(1, 12000)  # shorter than the 16000 target
     samples = [Sample(path=Path("fake_short.wav"), label="yes")]
     loader = fake_loader_factory(short_clip)
     ds = KeywordSpottingDataset(
         samples, label_to_index={"yes": 0}, audio_loader=loader
+    )
+    waveform, _ = ds[0]
+    assert waveform.shape[-1] == 16000
+
+
+def test_dataset_truncates_long_clips_to_fixed_length():
+    """Mirror case: a clip longer than 16000 samples (e.g. someone held the
+    button a bit too long during recording) should be truncated, not error
+    out or silently change the batch shape."""
+    long_clip = torch.zeros(1, 20000)
+    samples = [Sample(path=Path("fake_long.wav"), label="no")]
+    loader = fake_loader_factory(long_clip)
+    ds = KeywordSpottingDataset(
+        samples, label_to_index={"no": 0}, audio_loader=loader
     )
     waveform, _ = ds[0]
     assert waveform.shape[-1] == 16000

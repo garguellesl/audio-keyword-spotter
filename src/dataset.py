@@ -19,6 +19,32 @@ from torch.utils.data import Dataset
 # Signature: (file_path: Path) -> (waveform: torch.Tensor, sample_rate: int)
 AudioLoader = Callable[[Path], tuple[torch.Tensor, int]]
 
+# Speech Commands clips are ~1s at 16kHz. Not all clips are exactly this
+# length, so every waveform gets padded/truncated to this before batching.
+TARGET_LENGTH_SAMPLES = 16000
+
+
+def pad_or_truncate(waveform: torch.Tensor, target_length: int = TARGET_LENGTH_SAMPLES) -> torch.Tensor:
+    """Makes waveform exactly target_length samples long, on the last dim.
+
+    - Shorter clips: right-padded with zeros (silence).
+    - Longer clips: truncated from the end.
+
+    Chose simple start-aligned pad/truncate over center-padding: it's the
+    more common approach in keyword-spotting literature and keeps the logic
+    trivial to reason about. Revisit if accuracy suffers on short words.
+    """
+    current_length = waveform.shape[-1]
+
+    if current_length == target_length:
+        return waveform
+
+    if current_length < target_length:
+        padding = target_length - current_length
+        return torch.nn.functional.pad(waveform, (0, padding))
+
+    return waveform[..., :target_length]
+
 
 def default_audio_loader(path: Path) -> tuple[torch.Tensor, int]:
     """Real loader used in production. Kept thin on purpose so tests
@@ -73,11 +99,7 @@ class KeywordSpottingDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
         sample = self.samples[idx]
         waveform, sample_rate = self.audio_loader(sample.path)
-
-        # TODO (next session): clips in Speech Commands are ~1s but not all
-        # exactly the same number of samples, and I haven't decided yet
-        # whether to pad or truncate. Leaving this unhandled for now — the
-        # test below documents the gap instead of silently ignoring it.
+        waveform = pad_or_truncate(waveform)
 
         label_index = self.label_to_index[sample.label]
         return waveform, label_index
